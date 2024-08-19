@@ -16,6 +16,11 @@
 #define SCREEN_WIDTH 800
 #define SCREEN_HEIGHT 600
 
+#define CONSTRAINT_MODE_CIRCLE 0
+#define CONSTRAINT_MODE_SQUARE 1
+#define CONSTRAINT_MODE_TRIANGLE 2
+
+int constarintMode = CONSTRAINT_MODE_SQUARE;
 
 Node* head = NULL;
 Ball* ball;
@@ -37,10 +42,11 @@ Slider* sliderGravity;
 
 Button* toggleButton;
 Button* clearButton;
+Button* modeButton;
 
 bool insertedChain = false;
 
-void ApplyWall() {
+void ApplyCircleWall() {
     float centerX = SCREEN_WIDTH / 2;
     float centerY = SCREEN_HEIGHT / 2;
     float radius = 250;
@@ -67,6 +73,75 @@ void ApplyWall() {
             //printf("Setting to X: %f, Y: %f\n", centerX + toX, centerY + toY);
         }
         tmp = tmp->next;
+    }
+}
+
+void ApplySquareWall() {
+    float centerX = SCREEN_WIDTH / 2;
+    float centerY = SCREEN_HEIGHT / 2;
+    float span = 250;
+
+    Node* tmp = head;
+
+    while(tmp) {
+        float ballX = ((Ball*)tmp->value)->x;
+        float ballY = ((Ball*)tmp->value)->y;
+
+        Ball* ball = (Ball*)tmp->value;
+
+        if(ballX < centerX - span + ball->radius) {
+            ball->x = centerX - span + ball->radius;
+        }
+        if(ballX > centerX + span - ball->radius) {
+            ball->x = centerX + span - ball->radius;
+        }
+        if(ballY > centerY + span - ball->radius) {
+            ball->y = centerY + span - ball->radius;
+        }
+        if(ballY < centerY - span + ball->radius) {
+            ball->y = centerY - span + ball->radius;
+        }
+        tmp = tmp->next;
+    }
+}
+
+void ApplySquareTriangle() {
+    float centerX = SCREEN_WIDTH / 2;
+    float centerY = SCREEN_HEIGHT / 2;
+    float span = 250;
+
+    double x1 = centerX;
+    double y1 = centerY - span;
+    double x2 = centerX - span;
+    double y2 = centerY + span;
+    double x3 = centerX + span;
+    double y3 = centerY + span;
+
+    Node* tmp = head;
+
+    while(tmp) {
+        float ballX = ((Ball*)tmp->value)->x;
+        float ballY = ((Ball*)tmp->value)->y;
+
+        Ball* ball = (Ball*)tmp->value;
+
+        point p;
+        p = findPointInTriangle(ball->x, ball->y, ball->radius, x1, y1, x2, y2, x3, y3);
+
+        ball->x = p.x;
+        ball->y = p.y;
+
+        tmp = tmp->next;
+    }
+}
+
+void ApplyWall() {
+    if(constarintMode == CONSTRAINT_MODE_CIRCLE) {
+        ApplyCircleWall();
+    } else if(constarintMode == CONSTRAINT_MODE_SQUARE) {
+        ApplySquareWall();
+    } else if(constarintMode == CONSTRAINT_MODE_TRIANGLE) {
+        ApplySquareTriangle();
     }
 }
 
@@ -161,6 +236,10 @@ void clearButton_Click() {
     strcpy(toggleButton->text, "Insert Chain");
 }
 
+void modeButton_Click() {
+    constarintMode = !constarintMode;
+}
+
 void InitializeUI() {
     sliderRadius = newSlider(SCREEN_WIDTH + 25, 75, 250, 0);
     sliderRadius->value = 5;
@@ -173,6 +252,9 @@ void InitializeUI() {
 
     clearButton = newButton(SCREEN_WIDTH + 25, 365, 250, 70, "Delete All");
     registerButtonEvent(clearButton, clearButton_Click);
+
+    modeButton = newButton(SCREEN_WIDTH + 25, 455, 250, 70, "Square/Circle");
+    registerButtonEvent(modeButton, modeButton_Click);
 }
 
 void InitializeFont() {
@@ -242,11 +324,51 @@ void renderUI(SDL_Renderer* renderer) {
     
     // Button for clearing the balls
     renderButton(renderer, clearButton, font);
+
+    // Button for changing modes;
+    renderButton(renderer, modeButton, font);
+}
+
+void renderBackground(SDL_Renderer* renderer) {
+    if(constarintMode == CONSTRAINT_MODE_CIRCLE) {
+        float centerX = SCREEN_WIDTH / 2;
+        float centerY = SCREEN_HEIGHT / 2;
+        float radius = 250;
+
+        SDL_SetRenderDrawColor(renderer, 111, 220, 227, 255);
+        RenderFillCircle(renderer, centerX, centerY, radius + 20);
+
+        SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
+        RenderFillCircle(renderer, centerX, centerY, radius);
+    } else if(constarintMode == CONSTRAINT_MODE_SQUARE) {
+        float centerX = SCREEN_WIDTH / 2;
+        float centerY = SCREEN_HEIGHT / 2;
+        float span = 250;
+
+        SDL_SetRenderDrawColor(renderer, 111, 220, 227, 255);
+
+        SDL_Rect* rect;
+        rect->x = centerX - span - 20;
+        rect->y = centerY - span - 20;
+        rect->w = 2*span + 40;
+        rect->h = 2*span + 40;
+        SDL_RenderFillRect(renderer, rect);
+
+        rect->x += 20;
+        rect->y += 20;
+        rect->w -= 40;
+        rect->h -= 40;
+
+        SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
+        SDL_RenderFillRect(renderer, rect);
+    }
 }
 
 void render(double deltaTime) {
     SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
     SDL_RenderClear(renderer);
+
+    renderBackground(renderer);
 
     SDL_SetRenderDrawColor(renderer, 255, 255, 255, 255);
 
@@ -263,7 +385,7 @@ void render(double deltaTime) {
 
 void CreateNewBall(int x, int y) {
     float radius = 5 + (sliderRadius->value/100.0) * 25;
-    Ball* newBall = BallCreate(x, y, radius, 0, sliderGravity->value, BALL_TYPE_NORMAL);
+    Ball* newBall = BallCreate(x, y, radius, 0, sliderGravity->value * 10, BALL_TYPE_NORMAL);
     insertNode(&head, newBall);
 }
 
@@ -296,6 +418,7 @@ void HandleUIEvents(SDL_Event* ev) {
     HandleEvent(sliderGravity, ev);
     ButtonEvent(ev, toggleButton);
     ButtonEvent(ev, clearButton);
+    ButtonEvent(ev, modeButton);
 }
 
 void HandlePopSound() {
@@ -363,6 +486,9 @@ int main(int argc, char* argv[]) {
         render(deltaTime);
         deltaTime = (SDL_GetTicks() - lastTick) / 1000.0;
     }
+
+    SDL_free(renderer);
+    SDL_free(window);
 
     printf("%s \n", SDL_GetError());
     return 0;
